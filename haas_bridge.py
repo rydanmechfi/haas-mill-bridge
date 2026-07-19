@@ -26,14 +26,14 @@ from catalog import build_mdc_catalog, build_mtconnect_catalog
 from favorites import build_favorites
 from ha_client import HAError, HAPushClient, get_token
 from mtconnect import MTConnectClient, MTConnectError
-from qcommand import QCommandClient
+from qcommand import QCommandError, QCommandSession
 from tool_table import build_tool_table
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 log = logging.getLogger("haas_bridge")
 
 
-def poll_once(mtc: MTConnectClient, qc: QCommandClient, ha: HAPushClient) -> None:
+def poll_once(mtc: MTConnectClient, haas_host: str, mdc_port: int, ha: HAPushClient) -> None:
     now = datetime.datetime.now(datetime.timezone.utc).isoformat()
 
     try:
@@ -44,7 +44,15 @@ def poll_once(mtc: MTConnectClient, qc: QCommandClient, ha: HAPushClient) -> Non
         current = {}
         mtconnect_ok = False
 
-    mdc_catalog = build_mdc_catalog(qc)
+    # One connection per poll cycle, reused for every Q-command query this
+    # cycle needs -- opening a fresh connection per query eventually tripped
+    # the mill's own MDC connection limit (see qcommand.py).
+    try:
+        with QCommandSession(haas_host, mdc_port) as session:
+            mdc_catalog = build_mdc_catalog(session)
+    except QCommandError as e:
+        log.warning("MDC unreachable: %s", e)
+        mdc_catalog = {}
     mdc_ok = not all(k.endswith("_error") for k in mdc_catalog) if mdc_catalog else False
 
     ha.post_state(
@@ -103,11 +111,10 @@ def main():
     args = p.parse_args()
 
     mtc = MTConnectClient(args.haas_host, args.mtconnect_port)
-    qc = QCommandClient(args.haas_host, args.mdc_port)
     ha = HAPushClient(args.ha_host, get_token(args.token))
 
     if args.once:
-        poll_once(mtc, qc, ha)
+        poll_once(mtc, args.haas_host, args.mdc_port, ha)
         return
 
     last_button_ts = None
@@ -117,7 +124,7 @@ def main():
         now = time.monotonic()
         if pressed or (now - last_poll) >= args.poll_interval:
             try:
-                poll_once(mtc, qc, ha)
+                poll_once(mtc, args.haas_host, args.mdc_port, ha)
             except HAError as e:
                 log.error("HA push failed: %s", e)
             last_poll = now
