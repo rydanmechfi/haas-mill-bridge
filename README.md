@@ -40,6 +40,20 @@ Both interfaces are cleartext and unauthenticated on the control's side
 (CVE-2022-2475, CVE-2022-41636) — keep this bridge on the same isolated LAN
 segment as the mill and never expose either port to the internet.
 
+**Q-Command connections are rate-limited by the mill itself, not just by
+convention.** A quick back-to-back test against the real control
+(2026-07-19) showed roughly a dozen rapid connections succeed, then the
+next one just hangs until timeout — almost certainly what eventually broke
+an earlier version of this bridge that opened a fresh connection per query
+with no spacing (`QCommandError: Too many connections. Disconnecting.`
+after running for a while). `QCommandSession` (`qcommand.py`) fixes the
+common case by reusing one connection for every query in a poll cycle;
+don't reintroduce rapid-fire separate connections without spacing them out.
+
+**MTConnect's streaming mode (`/sample?interval=`) is not supported on this
+control** — confirmed live, returns an explicit `UNSUPPORTED` error. Only
+polling works.
+
 ## What it creates in Home Assistant
 
 Pushed via `POST /api/states/<entity_id>` using a long-lived access token:
@@ -61,6 +75,16 @@ The bridge polls its state every few seconds and treats a new timestamp as
 for free in the same MTConnect call as the health data, this is a manual
 fast-forward, not the only way data gets refreshed (it updates on every
 regular poll cycle regardless).
+
+**Two poll tiers**: the full cycle (`POLL_INTERVAL_S`, default 30s) covers
+everything above; a fast tier (`FAST_POLL_INTERVAL_S`, default 3s, see
+`fast.py`) covers just `sensor.haas_mill_spindle_speed` and
+`sensor.haas_mill_spindle_load` — the two values actually worth watching
+move in near-real-time. Kept deliberately narrow (a lone Q-command
+connection every few seconds, well clear of the burst limit noted above)
+rather than dropping the whole poll interval, which would also mean
+re-pushing and re-recording the 200-row tool table far more often than it
+ever actually changes.
 
 ## Deploy
 

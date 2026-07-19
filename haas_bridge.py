@@ -6,6 +6,14 @@ of values MTConnect doesn't expose (spindle load, active tool number, power
 -on time, tool-change count, run mode), its Ethernet Q-Commands/MDC socket
 (port 5051), then pushes everything into Home Assistant over REST.
 
+Two poll tiers: the full cycle (--poll-interval, default 30s) covers
+everything -- catalogs, tool table, favorites; a fast tier (--fast-poll
+-interval, default 3s, see fast.py) covers just spindle speed and load,
+the two values that are actually worth watching move in near-real-time.
+MTConnect's own streaming mode (`/sample?interval=`) is NOT supported on
+this control -- confirmed live 2026-07-19, returns an explicit UNSUPPORTED
+error -- so polling is the only option.
+
 Runs on its own always-on host (a small Proxmox LXC, per Shop_Assistant's
 CLAUDE.md "Haas Super Mini Mill" section) -- not on the HA host itself, not
 inside HA's own process. Read-only towards the mill throughout: qcommand.py
@@ -23,6 +31,7 @@ import os
 import time
 
 from catalog import build_mdc_catalog, build_mtconnect_catalog
+from fast import poll_fast
 from favorites import build_favorites
 from ha_client import HAError, HAPushClient, get_token
 from mtconnect import MTConnectClient, MTConnectError
@@ -104,6 +113,12 @@ def main():
     p.add_argument("--mdc-port", type=int, default=int(os.environ.get("MDC_PORT", "5051")))
     p.add_argument("--poll-interval", type=float, default=float(os.environ.get("POLL_INTERVAL_S", "30")))
     p.add_argument(
+        "--fast-poll-interval",
+        type=float,
+        default=float(os.environ.get("FAST_POLL_INTERVAL_S", "3")),
+        help="spindle speed/load only -- see fast.py for why this can be much shorter than --poll-interval",
+    )
+    p.add_argument(
         "--button-poll-interval", type=float, default=float(os.environ.get("BUTTON_POLL_INTERVAL_S", "5"))
     )
     p.add_argument("--token", help="HA long-lived access token (else $HA_TOKEN or .ha_token)")
@@ -119,6 +134,8 @@ def main():
 
     last_button_ts = None
     last_poll = 0.0
+    last_fast_poll = 0.0
+    tick = min(args.button_poll_interval, args.fast_poll_interval)
     while True:
         pressed, last_button_ts = check_refresh_button(ha, last_button_ts)
         now = time.monotonic()
@@ -128,7 +145,14 @@ def main():
             except HAError as e:
                 log.error("HA push failed: %s", e)
             last_poll = now
-        time.sleep(args.button_poll_interval)
+            last_fast_poll = now  # the full poll already refreshed spindle speed/load too
+        elif (now - last_fast_poll) >= args.fast_poll_interval:
+            try:
+                poll_fast(mtc, args.haas_host, args.mdc_port, ha)
+            except HAError as e:
+                log.error("HA push failed (fast tier): %s", e)
+            last_fast_poll = now
+        time.sleep(tick)
 
 
 if __name__ == "__main__":
