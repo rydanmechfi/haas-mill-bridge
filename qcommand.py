@@ -79,7 +79,18 @@ class QCommandSession:
         try:
             self.sock.sendall(command.encode("ascii") + b"\r\n")
             buf = b""
-            while not buf.endswith(b">"):
+            # Every response is framed ">>CONTENT\r\n>" -- must wait for the
+            # full "\r\n>" suffix, NOT just a bare trailing ">". The leading
+            # ">>" prefix starts every response too, so checking for a bare
+            # ">" can false-positive the instant the first one-or-two-byte
+            # TCP chunk arrives, cutting the read off before the real
+            # content shows up -- confirmed live 2026-07-19: it silently
+            # left the rest of that response sitting in the socket buffer,
+            # which then bled into and corrupted the *next* query's read on
+            # the same session. Not a risk on a one-shot connection (no
+            # "next query" to corrupt), which is why this didn't show up
+            # until queries started sharing a connection.
+            while not buf.endswith(b"\r\n>"):
                 chunk = self.sock.recv(4096)
                 if not chunk:
                     break
