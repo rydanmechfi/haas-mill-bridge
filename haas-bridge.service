@@ -1,0 +1,16 @@
+[Unit]
+Description=Haas Super Mini Mill -> Home Assistant bridge
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=haas-bridge
+WorkingDirectory=/opt/haas-mill-bridge
+EnvironmentFile=/opt/haas-mill-bridge/.env
+ExecStart=/usr/bin/python3 /opt/haas-mill-bridge/haas_bridge.py
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

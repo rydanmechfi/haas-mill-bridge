@@ -1,0 +1,4 @@
+.env
+.ha_token
+__pycache__/
+*.pyc
