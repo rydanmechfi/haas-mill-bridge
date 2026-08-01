@@ -39,4 +39,16 @@ def build_favorites(mtconnect: dict, mdc: dict) -> dict:
             mdc["spindle_load_pct"],
             {"data_source": "mdc", "unit_of_measurement": "%"},
         )
+
+    # M08 (flood) or M07 (mist) present in the active-mcodes list = coolant
+    # running. See haas_params.py's comment on "active_mcodes" for how this
+    # was cross-validated against a real on/off transition -- M09 (coolant
+    # off) is never itself listed, the codes for flood/mist just drop out
+    # of the list entirely once coolant stops, so no "off" code to check.
+    active_mcodes = [c.strip() for c in mtconnect.get("active_mcodes", "").split(",")]
+    coolant_running = "08" in active_mcodes or "07" in active_mcodes
+    out["binary_sensor.haas_mill_coolant_running"] = (
+        "on" if coolant_running else "off",
+        {"data_source": "mtconnect", "active_mcodes": mtconnect.get("active_mcodes", "")},
+    )
     return out

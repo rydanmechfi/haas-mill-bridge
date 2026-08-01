@@ -70,6 +70,18 @@ MTCONNECT_HEALTH_ITEMS = {
     "work_offset_g58": "g58",
     "work_offset_g59": "g59",
     "live_tool_number": "sp3number",
+    # "dhmtcodes" (raw MTConnect name "DHMT_Codes", under the Activecodes
+    # component) -- comma list of currently-latched M-codes, e.g.
+    # "03,04,08,26". Confirmed live 2026-08-01/08-02 by cross-checking a
+    # real coolant on/off transition: with flood coolant running the list
+    # contained "08" (M08); once coolant stopped it read "05,05,30,05" (no
+    # "08", but "05" showed up matching the spindle also stopping - M05).
+    # This is the actual live signal -- the <Coolant> MTConnect component's
+    # own items (tsc/hpc/clntspigot/showerclnt/mist/pulsejet/tab, all under
+    # dataItemId "coolant") looked promising by name but are STATIC
+    # machine-config/purchased-option flags: their timestamps never moved
+    # across that same test, confirmed dead ends, deliberately not used.
+    "active_mcodes": "dhmtcodes",
 }
 
 # --- Ethernet Q-Commands / MDC (port 5051) ----------------------------------
