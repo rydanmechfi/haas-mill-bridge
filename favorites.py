@@ -85,4 +85,32 @@ def build_favorites(mtconnect: dict, mdc: dict) -> dict:
             "active_mcodes": mtconnect.get("active_mcodes", ""),
         },
     )
+
+    # Coolant level (#13013, raw sensor units) -> 0-100%. SINGLE-POINT
+    # calibration, not a proper two-point curve: user read the control's
+    # own native Coolant Display gauge on 2026-08-02 at raw 2891 = 60%,
+    # which is the only real-world reference point so far. Assumes a true
+    # zero baseline (raw 0 == empty) to derive the 100% raw value --
+    # reasonable for a simple level sensor, but unverified at either
+    # extreme. Refine with a second reading (e.g. right after topping off
+    # to full, or if it's ever visibly near empty) rather than trusting
+    # this scale precisely; clamped to 0-100 so a reading past the
+    # projected 100% (plausible if the true curve isn't linear that far)
+    # doesn't display as a nonsensical >100%.
+    coolant_level_raw = mdc.get("coolant_level_raw")
+    if coolant_level_raw is not None:
+        RAW_AT_100PCT = 2891 / 0.60
+        try:
+            pct = max(0.0, min(100.0, float(coolant_level_raw) / RAW_AT_100PCT * 100))
+            out["sensor.haas_mill_coolant_level"] = (
+                f"{pct:.0f}",
+                {
+                    "data_source": "mdc",
+                    "unit_of_measurement": "%",
+                    "raw_value": coolant_level_raw,
+                    "calibration": "single-point 2026-08-02: raw 2891 = 60%, assumes zero baseline",
+                },
+            )
+        except (TypeError, ValueError):
+            pass
     return out

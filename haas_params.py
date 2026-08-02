@@ -105,6 +105,12 @@ MDC_ITEMS = {
     # like a comms glitch, not a real value -- favorites.py treats
     # anything other than a clean 0/1 as untrustworthy rather than as fact.
     "coolant_pump_motor": ("Q600", 12018),
+    # #13013, "Coolant level" per the Macro Variables Table (filtered
+    # analog-to-digital input block). Raw sensor units, not a percentage --
+    # see favorites.py for the single-point calibration to a 0-100% scale
+    # (user-reported 2026-08-02: raw 2891 == 60% on the control's own
+    # native Coolant Display gauge).
+    "coolant_level_raw": ("Q600", 13013),
 }
 
 # #3020/#3021 were tried as power-on/cycle time candidates during recon and
