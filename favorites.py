@@ -40,13 +40,18 @@ def build_favorites(mtconnect: dict, mdc: dict) -> dict:
             {"data_source": "mdc", "unit_of_measurement": "%"},
         )
 
-    # M08 (flood) or M07 (mist) present in the active-mcodes list = coolant
-    # running. See haas_params.py's comment on "active_mcodes" for how this
-    # was cross-validated against a real on/off transition -- M09 (coolant
-    # off) is never itself listed, the codes for flood/mist just drop out
-    # of the list entirely once coolant stops, so no "off" code to check.
+    # active_mcodes is a short (~4-entry) window, oldest first -- NOT just a
+    # "currently on" flag. Confirmed live 2026-08-02: right after a coolant
+    # restart it read "05,09,08,03" (M09 off, THEN M08 on, both still in the
+    # window at once). Whichever of 07/08/09 appears LAST (rightmost/most
+    # recent) is the real current state; just checking "is 08 present
+    # anywhere" would misread a quick off-then-on-again (or the reverse) if
+    # both ends are still in the window. Absent entirely (confirmed during a
+    # long idle stretch: "05,05,30,05", no 07/08/09 at all) = off, it ages
+    # out once other M-codes push it out of the window.
     active_mcodes = [c.strip() for c in mtconnect.get("active_mcodes", "").split(",")]
-    coolant_running = "08" in active_mcodes or "07" in active_mcodes
+    coolant_codes_seen = [c for c in active_mcodes if c in ("07", "08", "09")]
+    coolant_running = bool(coolant_codes_seen) and coolant_codes_seen[-1] != "09"
     out["binary_sensor.haas_mill_coolant_running"] = (
         "on" if coolant_running else "off",
         {"data_source": "mtconnect", "active_mcodes": mtconnect.get("active_mcodes", "")},
