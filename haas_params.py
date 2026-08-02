@@ -111,6 +111,16 @@ MDC_ITEMS = {
     # (user-reported 2026-08-02: raw 2891 == 60% on the control's own
     # native Coolant Display gauge).
     "coolant_level_raw": ("Q600", 13013),
+    # #13014, "A-Input 14 COOLANT_TEMPERATURE" per the control's own
+    # DIAGNOSTICS -> I/O tab (connector P44.1), following the same #13000 +
+    # input-number pattern confirmed for coolant level (#13013 == Input
+    # 13). Confirmed live 2026-08-02 that #13014 matches the screen's
+    # raw value (both read 3). UNLIKE coolant level, there is no known
+    # on-machine calibrated display to cross-check this against -- raw "3"
+    # is not asserted to mean anything in real temperature units yet.
+    # favorites.py exposes it as an explicitly "raw" sensor rather than
+    # guessing a °F/°C conversion.
+    "coolant_temperature_raw": ("Q600", 13014),
 }
 
 # #3020/#3021 were tried as power-on/cycle time candidates during recon and

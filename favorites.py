@@ -113,4 +113,18 @@ def build_favorites(mtconnect: dict, mdc: dict) -> dict:
             )
         except (TypeError, ValueError):
             pass
+
+    # Coolant temperature (#13014, raw sensor units) -- NO calibration
+    # reference exists yet (unlike coolant level, there's no native
+    # on-screen gauge to cross-check against), so this is exposed as an
+    # explicitly raw/uncalibrated value rather than guessing a °F or °C
+    # conversion. Currently reads a suspiciously low "3", which may mean
+    # this sensor isn't populated/wired on this machine -- don't trust it
+    # as a real temperature until there's a way to cross-check it.
+    coolant_temp_raw = mdc.get("coolant_temperature_raw")
+    if coolant_temp_raw is not None:
+        out["sensor.haas_mill_coolant_temperature_raw"] = (
+            coolant_temp_raw,
+            {"data_source": "mdc", "calibration": "uncalibrated -- raw sensor units, not a real temperature yet"},
+        )
     return out
