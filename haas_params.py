@@ -94,6 +94,17 @@ MDC_ITEMS = {
     "power_on_time": ("Q300", None),
     "tool_change_count": ("Q200", None),
     "run_mode": ("Q104", None),
+    # Discrete output #18, "COOLANT_PUMP_MOTOR" per the control's own
+    # DIAGNOSTICS -> I/O tab (confirmed live 2026-08-02 against the real
+    # physical relay, cross-checked at the same instant: screen showed 0
+    # while coolant was off, #12018 read 0.0 three times in a row). This is
+    # the actual relay state -- unlike active_mcodes (see favorites.py),
+    # it catches coolant turned on/off manually at the panel, not just from
+    # a running program. One earlier one-off read of 23.0 (first query of a
+    # session, never repeated in 5 more reads across 2 sessions) looked
+    # like a comms glitch, not a real value -- favorites.py treats
+    # anything other than a clean 0/1 as untrustworthy rather than as fact.
+    "coolant_pump_motor": ("Q600", 12018),
 }
 
 # #3020/#3021 were tried as power-on/cycle time candidates during recon and

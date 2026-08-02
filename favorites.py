@@ -40,20 +40,49 @@ def build_favorites(mtconnect: dict, mdc: dict) -> dict:
             {"data_source": "mdc", "unit_of_measurement": "%"},
         )
 
-    # active_mcodes is a short (~4-entry) window, oldest first -- NOT just a
-    # "currently on" flag. Confirmed live 2026-08-02: right after a coolant
-    # restart it read "05,09,08,03" (M09 off, THEN M08 on, both still in the
-    # window at once). Whichever of 07/08/09 appears LAST (rightmost/most
-    # recent) is the real current state; just checking "is 08 present
-    # anywhere" would misread a quick off-then-on-again (or the reverse) if
-    # both ends are still in the window. Absent entirely (confirmed during a
-    # long idle stretch: "05,05,30,05", no 07/08/09 at all) = off, it ages
-    # out once other M-codes push it out of the window.
+    # Primary signal: #12018, discrete output "COOLANT_PUMP_MOTOR" -- the
+    # actual relay state (confirmed live 2026-08-02 against the control's
+    # own DIAGNOSTICS -> I/O tab), so unlike active_mcodes below it catches
+    # coolant toggled manually at the panel, not just from a running
+    # program. Should only ever read 0.0 or 1.0; one earlier one-off read
+    # of 23.0 (never repeated) looked like a comms glitch, so anything
+    # other than a clean 0/1 is treated as untrustworthy for this cycle
+    # rather than taken at face value.
+    coolant_pump_raw = mdc.get("coolant_pump_motor")
+    coolant_relay_reading = None
+    if coolant_pump_raw is not None:
+        try:
+            val = float(coolant_pump_raw)
+            if val in (0.0, 1.0):
+                coolant_relay_reading = val == 1.0
+        except (TypeError, ValueError):
+            pass
+
+    # Fallback signal: active_mcodes, a short (~4-entry) MTConnect window,
+    # oldest first -- NOT just a "currently on" flag. Confirmed live
+    # 2026-08-02: right after a coolant restart it read "05,09,08,03" (M09
+    # off, THEN M08 on, both still in the window at once). Whichever of
+    # 07/08/09 appears LAST (rightmost/most recent) is the real current
+    # state. Absent entirely (confirmed during a long idle stretch:
+    # "05,05,30,05", no 07/08/09 at all) = off, it ages out once other
+    # M-codes push it out of the window. Used only when the relay reading
+    # above is unavailable/glitchy for this cycle -- it's blind to manual
+    # panel coolant use, which is exactly the gap #12018 fixes.
     active_mcodes = [c.strip() for c in mtconnect.get("active_mcodes", "").split(",")]
     coolant_codes_seen = [c for c in active_mcodes if c in ("07", "08", "09")]
-    coolant_running = bool(coolant_codes_seen) and coolant_codes_seen[-1] != "09"
+    mcode_reading = bool(coolant_codes_seen) and coolant_codes_seen[-1] != "09"
+
+    if coolant_relay_reading is not None:
+        coolant_running, coolant_source = coolant_relay_reading, "mdc_relay"
+    else:
+        coolant_running, coolant_source = mcode_reading, "mtconnect_mcode_fallback"
+
     out["binary_sensor.haas_mill_coolant_running"] = (
         "on" if coolant_running else "off",
-        {"data_source": "mtconnect", "active_mcodes": mtconnect.get("active_mcodes", "")},
+        {
+            "data_source": coolant_source,
+            "coolant_pump_motor_raw": coolant_pump_raw,
+            "active_mcodes": mtconnect.get("active_mcodes", ""),
+        },
     )
     return out
